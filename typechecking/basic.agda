@@ -1,7 +1,5 @@
 open import Data.Nat
 open import Data.Bool hiding (T)
-open import Data.Maybe
-open import Data.Empty
 open import Relation.Binary.PropositionalEquality
 open ≡-Reasoning
 
@@ -86,3 +84,19 @@ progress {if e e1 e2} {τ} (typ-if p p1 p2) with progress {e} p
 ... | normal p' with canonical {e} {bool} p p'
 ...   | c-bool {true} = steps step-if-t
 ...   | c-bool {false} = steps step-if-f
+
+preservation : ∀{e e' τ} -> ⊢ e ∶ τ -> (e ↝ e') -> ⊢ e' ∶ τ
+preservation (typ-add p1-typ p2-typ) (step-add-1 p1-step) =
+  typ-add (preservation p1-typ p1-step) p2-typ
+preservation (typ-add p1-typ p2-typ) (step-add-2 p2-step) =
+  typ-add p1-typ (preservation p2-typ p2-step)
+preservation (typ-add _ _) step-add-v = typ-int
+preservation (typ-and p1-typ p2-typ) (step-and-1 p1-step) =
+  typ-and (preservation p1-typ p1-step) p2-typ
+preservation (typ-and p1-typ p2-typ) (step-and-2 p2-step) =
+  typ-and p1-typ (preservation p2-typ p2-step)
+preservation (typ-and _ _) step-and-v = typ-bool
+preservation (typ-if p-typ p1-typ p2-typ) (step-if-cond p-step) =
+  typ-if (preservation p-typ p-step) p1-typ p2-typ
+preservation (typ-if _ p1-typ _) step-if-t = p1-typ
+preservation (typ-if _ _ p2-typ) step-if-f = p2-typ
