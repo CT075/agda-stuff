@@ -97,6 +97,84 @@ addNoBool ()
 ifNoNat : ∀{n : ℕ} -> ⊢ (valN n) ∶ bool -> ⊥
 ifNoNat ()
 
+matchTypeSemantics : ∀{τ} -> matchType τ τ ≡ just (refl {x = τ})
+matchTypeSemantics {nat} = refl
+matchTypeSemantics {bool} = refl
+
+typeCorrectLHS : ∀{b : Bool}{e : Exp b}{τ : Ty} ->
+  ⊢ e ∶ τ -> (synthtype e ≡ just τ)
+typeCorrectLHS {_}{valB _} {bool} typ-bool = refl
+typeCorrectLHS {_}{valN _} {nat} typ-int = refl
+typeCorrectLHS {_}{add e1 e2} {nat} (typ-add p1 p2) = begin
+    synthtype (add e1 e2)
+  ≡⟨ refl ⟩ -- definition
+    (synthtype e1 >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
+      synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
+  ≡⟨ cong
+      (λ n -> n >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
+        synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
+      (typeCorrectLHS {_} {e1} {nat} p1) ⟩ -- IH e1
+    (just nat >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
+      synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
+  ≡⟨ refl ⟩ -- definition of (>>=) and matchType
+    (synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))
+  ≡⟨ cong
+      (λ n -> n >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))
+      (typeCorrectLHS {_} {e2} {nat} p2) ⟩ -- IH e2
+    (just nat >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))
+  ≡⟨ refl ⟩
+    just nat
+  ∎
+typeCorrectLHS {_}{if e e1 e2} {τ} (typ-if p p1 p2) = begin
+    synthtype (if e e1 e2)
+  ≡⟨ refl ⟩ -- definition
+    (synthtype e >>= (λ τ ->
+      matchType τ bool >>= (λ _ ->
+        synthtype e1 >>= (λ τ1 ->
+          synthtype e2 >>= (λ τ2 ->
+            matchType τ1 τ2 >>= (λ _ ->
+              just τ1))))))
+  ≡⟨ cong
+       (λ n -> n >>= (λ τ ->
+         matchType τ bool >>= (λ _ ->
+           synthtype e1 >>= (λ τ1 ->
+             synthtype e2 >>= (λ τ2 ->
+               matchType τ1 τ2 >>= (λ _ ->
+                 just τ1))))))
+       (typeCorrectLHS {_} {e} {bool} p)⟩ -- IH e
+     (just bool >>= (λ τ ->
+       matchType τ bool >>= (λ _ ->
+         synthtype e1 >>= (λ τ1 ->
+           synthtype e2 >>= (λ τ2 ->
+             matchType τ1 τ2 >>= (λ _ ->
+               just τ1))))))
+  ≡⟨ refl ⟩ -- definition of (>>=) and matchType
+     (synthtype e1 >>= (λ τ1 ->
+       synthtype e2 >>= (λ τ2 ->
+         matchType τ1 τ2 >>= (λ _ -> just τ1))))
+  ≡⟨ cong
+       (λ n -> n >>= (λ τ1 ->
+         synthtype e2 >>= (λ τ2 ->
+           matchType τ1 τ2 >>= (λ _ -> just τ1))))
+       (typeCorrectLHS {_} {e1} {τ} p1) ⟩ -- IH e1
+     (just τ >>= (λ τ1 ->
+       synthtype e2 >>= (λ τ2 ->
+         matchType τ1 τ2 >>= (λ _ -> just τ1))))
+  ≡⟨ refl ⟩
+     (synthtype e2 >>= (λ τ2 ->
+       matchType τ τ2 >>= (λ _ -> just τ)))
+  ≡⟨ cong
+       (λ n -> n >>= (λ τ2 -> matchType τ τ2 >>= (λ _ -> just τ)))
+       (typeCorrectLHS {_} {e2} {τ} p2) ⟩ -- IH e2
+     (just τ >>= (λ τ2 -> matchType τ τ2 >>= (λ _ -> just τ)))
+  ≡⟨ refl ⟩
+     (matchType τ τ >>= (λ _ -> just τ))
+  ≡⟨ cong (λ n -> n >>= (λ _ -> just τ)) (matchTypeEquiv {τ}) ⟩
+     (just (refl {x = τ}) >>= (λ _ -> just τ))
+  ≡⟨ refl ⟩
+     just τ
+  ∎
+
 preservation : ∀{e : Exp true}{τ : Ty} -> (p : ⊢ e ∶ τ) ->
     (synthtype e ≡ synthtype (∃.proj₂ (step {e} p)))
 preservation {add {true} {_} e1 e2} {nat} (typ-add p1 p2) = begin
@@ -201,83 +279,72 @@ preservation {if {true} e e1 e2} (typ-if p p1 p2) = begin
   ≡⟨ refl ⟩ -- definition, step backwards
     synthtype (if (∃.proj₂ (step {e} p)) e1 e2)
   ∎
-preservation {if {false} (valN n) e1 e2} (typ-if p p1 p2) = ⊥-elim (ifNoNat p)
-preservation {if {false} (valB b) e1 e2} (typ-if p p1 p2) = todo
-  where postulate
-    todo :
-      synthtype (if (valB b) e1 e2) ≡
-      synthtype (∃.proj₂ (step {if (valB b) e1 e2} (typ-if p p1 p2)))
-
-typeCorrectLHS : ∀{b : Bool}{e : Exp b}{τ : Ty} ->
-  ⊢ e ∶ τ -> (synthtype e ≡ just τ)
-typeCorrectLHS {_}{valB _} {bool} typ-bool = refl
-typeCorrectLHS {_}{valN _} {nat} typ-int = refl
-typeCorrectLHS {_}{add e1 e2} {nat} (typ-add p1 p2) = begin
-    synthtype (add e1 e2)
-  ≡⟨ refl ⟩ -- definition
-    (synthtype e1 >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
-      synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
+preservation {if {false} (valN n) e1 e2} {τ} (typ-if p p1 p2) = ⊥-elim (ifNoNat p)
+preservation {if {false} (valB true) e1 e2} {τ} (typ-if p p1 p2) = begin
+    synthtype (if (valB true) e1 e2)
+  ≡⟨ refl ⟩ -- definition of [synthtype] and (>>=)
+    (synthtype e1 >>= (λ τ1 ->
+      synthtype e2 >>= (λ τ2 ->
+        matchType τ1 τ2 >>= (λ _ -> just τ1))))
   ≡⟨ cong
-      (λ n -> n >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
-        synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
-      (typeCorrectLHS {_} {e1} {nat} p1) ⟩ -- IH e1
-    (just nat >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
-      synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
-  ≡⟨ refl ⟩ -- definition of (>>=) and matchType
-    (synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))
-  ≡⟨ cong
-      (λ n -> n >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))
-      (typeCorrectLHS {_} {e2} {nat} p2) ⟩ -- IH e2
-    (just nat >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))
-  ≡⟨ refl ⟩
-    just nat
-  ∎
-typeCorrectLHS {_}{if e e1 e2} {τ} (typ-if p p1 p2) = begin
-    synthtype (if e e1 e2)
-  ≡⟨ refl ⟩ -- definition
-    (synthtype e >>= (λ τ ->
-      matchType τ bool >>= (λ _ ->
-        synthtype e1 >>= (λ τ1 ->
-          synthtype e2 >>= (λ τ2 ->
-            matchType τ1 τ2 >>= (λ _ ->
-              just τ1))))))
-  ≡⟨ cong
-       (λ n -> n >>= (λ τ ->
-         matchType τ bool >>= (λ _ ->
-           synthtype e1 >>= (λ τ1 ->
-             synthtype e2 >>= (λ τ2 ->
-               matchType τ1 τ2 >>= (λ _ ->
-                 just τ1))))))
-       (typeCorrectLHS {_} {e} {bool} p)⟩ -- IH e
-     (just bool >>= (λ τ ->
-       matchType τ bool >>= (λ _ ->
-         synthtype e1 >>= (λ τ1 ->
-           synthtype e2 >>= (λ τ2 ->
-             matchType τ1 τ2 >>= (λ _ ->
-               just τ1))))))
-  ≡⟨ refl ⟩ -- definition of (>>=) and matchType
-     (synthtype e1 >>= (λ τ1 ->
-       synthtype e2 >>= (λ τ2 ->
-         matchType τ1 τ2 >>= (λ _ -> just τ1))))
-  ≡⟨ cong
-       (λ n -> n >>= (λ τ1 ->
+       (λ ty -> ty >>= (λ τ1 ->
          synthtype e2 >>= (λ τ2 ->
            matchType τ1 τ2 >>= (λ _ -> just τ1))))
-       (typeCorrectLHS {_} {e1} {τ} p1) ⟩ -- IH e1
-     (just τ >>= (λ τ1 ->
-       synthtype e2 >>= (λ τ2 ->
-         matchType τ1 τ2 >>= (λ _ -> just τ1))))
-  ≡⟨ refl ⟩
-     (synthtype e2 >>= (λ τ2 ->
-       matchType τ τ2 >>= (λ _ -> just τ)))
+       (typeCorrectLHS p1) ⟩ -- [synthtype] correctness
+    (just τ >>= (λ τ1 ->
+      synthtype e2 >>= (λ τ2 ->
+        matchType τ1 τ2 >>= (λ _ -> just τ1))))
+  ≡⟨ refl ⟩ -- definition of (>>=)
+    (synthtype e2 >>= (λ τ2 ->
+      matchType τ τ2 >>= (λ _ -> just τ)))
   ≡⟨ cong
-       (λ n -> n >>= (λ τ2 -> matchType τ τ2 >>= (λ _ -> just τ)))
-       (typeCorrectLHS {_} {e2} {τ} p2) ⟩ -- IH e2
-     (just τ >>= (λ τ2 -> matchType τ τ2 >>= (λ _ -> just τ)))
-  ≡⟨ refl ⟩
-     (matchType τ τ >>= (λ _ -> just τ))
-  ≡⟨ cong (λ n -> n >>= (λ _ -> just τ)) (matchTypeEquiv {τ}) ⟩
-     (just (refl {x = τ}) >>= (λ _ -> just τ))
-  ≡⟨ refl ⟩
-     just τ
+       (λ ty -> ty >>= (λ τ2 ->
+         matchType τ τ2 >>= (λ _ -> just τ)))
+       (typeCorrectLHS p2) ⟩ -- [synthtype] correctness
+    (just τ >>= (λ τ2 ->
+      matchType τ τ2 >>= (λ _ -> just τ)))
+  ≡⟨ refl ⟩ -- definition of (>>=)
+    (matchType τ τ >>= (λ _ -> just τ))
+  ≡⟨ cong
+       (λ pf -> pf >>= (λ _ -> just τ))
+       (matchTypeSemantics {τ}) ⟩ -- definition of [matchType]
+    (just (refl {x = τ}) >>= (λ _ -> just τ))
+  ≡⟨ refl ⟩ -- definition of (>>=)
+    just τ
+  ≡⟨ sym (typeCorrectLHS p1) ⟩
+    synthtype e1
+  ∎
+preservation {if {false} (valB false) e1 e2} {τ} (typ-if p p1 p2) = begin
+    synthtype (if (valB true) e1 e2)
+  ≡⟨ refl ⟩ -- definition of [synthtype] and (>>=)
+    (synthtype e1 >>= (λ τ1 ->
+      synthtype e2 >>= (λ τ2 ->
+        matchType τ1 τ2 >>= (λ _ -> just τ1))))
+  ≡⟨ cong
+       (λ ty -> ty >>= (λ τ1 ->
+         synthtype e2 >>= (λ τ2 ->
+           matchType τ1 τ2 >>= (λ _ -> just τ1))))
+       (typeCorrectLHS p1) ⟩ -- [synthtype] correctness
+    (just τ >>= (λ τ1 ->
+      synthtype e2 >>= (λ τ2 ->
+        matchType τ1 τ2 >>= (λ _ -> just τ1))))
+  ≡⟨ refl ⟩ -- definition of (>>=)
+    (synthtype e2 >>= (λ τ2 ->
+      matchType τ τ2 >>= (λ _ -> just τ)))
+  ≡⟨ cong
+       (λ ty -> ty >>= (λ τ2 ->
+         matchType τ τ2 >>= (λ _ -> just τ)))
+       (typeCorrectLHS p2) ⟩ -- [synthtype] correctness
+    (just τ >>= (λ τ2 ->
+      matchType τ τ2 >>= (λ _ -> just τ)))
+  ≡⟨ refl ⟩ -- definition of (>>=)
+    (matchType τ τ >>= (λ _ -> just τ))
+  ≡⟨ cong
+       (λ pf -> pf >>= (λ _ -> just τ))
+       (matchTypeSemantics {τ}) ⟩ -- definition of [matchType]
+    (just (refl {x = τ}) >>= (λ _ -> just τ))
+  ≡⟨ refl ⟩ -- definition of (>>=)
+    just τ
+  ≡⟨ sym (typeCorrectLHS p2) ⟩
+    synthtype e2
   ∎
