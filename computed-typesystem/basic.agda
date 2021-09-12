@@ -188,7 +188,7 @@ preservation {add {true} {_} e1 e2} {nat} (typ-add p1 p2) = begin
      (preservation {e1} p1) ⟩ -- IH
     (synthtype (∃.proj₂ (step {e1} p1)) >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
       synthtype e2 >>= (λ τ2 -> matchType τ2 nat >>= (λ _ -> just nat)))))
-  ≡⟨ refl ⟩ -- definition, step backwards
+  ≡⟨ refl ⟩ -- definition of [synthtype], step backwards
     synthtype (add (∃.proj₂ (step {e1} p1)) e2)
   ∎
 preservation {add {false} {true} e1 e2} {nat} (typ-add p1 p2) = begin
@@ -203,7 +203,7 @@ preservation {add {false} {true} e1 e2} {nat} (typ-add p1 p2) = begin
     (synthtype e1 >>= (λ τ1 -> matchType τ1 nat >>= (λ _ ->
       synthtype (∃.proj₂ (step {e2} p2)) >>= (λ τ2 ->
         matchType τ2 nat >>= (λ _ -> just nat)))))
-  ≡⟨ refl ⟩ -- definition, step backwards
+  ≡⟨ refl ⟩ -- definition of [synthtype], step backwards
     synthtype (add e1 (∃.proj₂ (step {e2} p2)))
   ∎
 -- TODO: This actually looks pretty close to the paper version, but it'd be nice
@@ -276,7 +276,7 @@ preservation {if {true} e e1 e2} (typ-if p p1 p2) = begin
             matchType τ1 τ2 >>= (λ _ ->
               just τ1
             ))))))
-  ≡⟨ refl ⟩ -- definition, step backwards
+  ≡⟨ refl ⟩ -- definition of [synthtype], step backwards
     synthtype (if (∃.proj₂ (step {e} p)) e1 e2)
   ∎
 preservation {if {false} (valN n) e1 e2} {τ} (typ-if p p1 p2) = ⊥-elim (ifNoNat p)
